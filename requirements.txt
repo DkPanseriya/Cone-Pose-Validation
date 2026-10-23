@@ -1,0 +1,9 @@
+# Tested with Python 3.12, torch 2.14 (CPU), ultralytics 8.4, numpy 2.5, opencv-python 5.0.
+# For a GPU, install torch from https://pytorch.org first.
+ultralytics>=8.3
+opencv-python>=4.9
+numpy>=1.26
+matplotlib>=3.8
+pyyaml>=6.0
+tqdm>=4.66
+pytest>=8.0

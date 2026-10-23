@@ -1,0 +1,23 @@
+# Which model class matches which FSOCO label, and the facts the validation relies on.
+# Edit this file to validate a different cone model.
+
+classes:                      # model class id -> name, FSOCO class titles, physical cone height
+  0: {name: big_orange,   fsoco: [large_orange_cone, seg_large_orange_cone], height_m: 0.505}
+  1: {name: small_orange, fsoco: [orange_cone, seg_orange_cone],             height_m: 0.325}
+  2: {name: blue,         fsoco: [blue_cone, seg_blue_cone],                 height_m: 0.325}
+  3: {name: yellow,       fsoco: [yellow_cone, seg_yellow_cone],             height_m: 0.325}
+
+ignore_classes: [unknown_cone, seg_unknown_cone]   # neither rewarded nor punished
+
+# Order in which the model returns its 8 keypoints, walking around the cone outline.
+keypoints: [bottom_left, mid_low_left, mid_high_left, top_left,
+            top_right, mid_high_right, mid_low_right, bottom_right]
+
+range_gate:                   # evaluate cones at 1-15 m only
+  enabled: true
+  min_m: 1.0
+  max_m: 15.0
+  vertical_fov_deg: 80        # FSOCO has no intrinsics: one assumed camera for every image
+  unreliable_tags: [truncated, knocked_over]   # box height says nothing about distance for these:
+                                               # ignored in detection when the gate is on, always left
+                                               # out of keypoint scoring (outline cut off or tilted)

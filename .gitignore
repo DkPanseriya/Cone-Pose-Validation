@@ -1,0 +1,25 @@
+# FSOCO is not redistributed: download it from https://fsoco.github.io/fsoco-dataset/
+data/
+fsoco_*/
+
+# Outputs and models
+results/
+runs/
+*.pt
+*.torchscript
+*.onnx
+*.engine
+/keypoint_check.png
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
