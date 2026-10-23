@@ -8,6 +8,8 @@ Validate a cone detector with keypoints (YOLOv8-pose) on the public [FSOCO datas
 
 A Formula Student driverless car reads the track from coloured cones, and with a single camera it estimates where each cone stands from keypoints on the cone's outline. A model trained on one team's car has to work on any camera, mounting angle and light. FSOCO pools images from more than 40 teams, so it is a hard test of robustness and generalisation.
 
+![One image from each of eight FSOCO teams](docs/figures/fsoco_variety.png)
+
 FSOCO has cone boxes and pixel masks, but no keypoints. This workflow uses both:
 
 | Part | FSOCO data | Measures |
@@ -30,7 +32,13 @@ flowchart LR
 
 - **Matching.** COCO-style: highest score first, each prediction takes the free ground-truth cone it overlaps most.
 - **Range gate.** Distance comes from the cone's known height: `distance = cone height x focal length / box height`. Cones outside 1 to 15 m, unknown cones, and cones tagged truncated or knocked over are ignored: a prediction on them counts neither for nor against the model.
-- **Keypoint error.** The mask outline is where the cone's edge really is. Every keypoint the model predicts should lie on it, so the distance to the outline, in pixels and as a share of cone height, measures accuracy without hand labels.
+
+![Which labelled cones are scored and which are ignored](docs/figures/what_gets_scored.png)
+
+- **Keypoint error.** The mask outline is where the cone's edge really is. Every keypoint the model predicts should lie on it, so the distance to the outline, in pixels and as a share of cone height, measures accuracy without hand labels (figure at the top).
+- **Layout check.** A keypoint can sit on the outline in the wrong place, so the keypoints' order is checked as well:
+
+![Swapped keypoints pass the outline test but fail the layout check](docs/figures/layout_check.png)
 
 ## Quick start
 
@@ -46,7 +54,7 @@ python evaluate_keypoints.py --model your_cone_model.pt --dataset data/fsoco_seg
 python visualize.py --model your_cone_model.pt --image data/fsoco_segmentation_train/<team>/img/<image>
 ```
 
-Results go to `results/`: a JSON summary plus `confusion_matrix.png`, `ap_vs_iou.png`, `recall_by_distance.png` and `keypoint_errors.png`. `--limit 20` runs a quick check, and `--exclude list.txt` leaves out images the model was trained on.
+Results go to `results/`: a JSON summary plus `confusion_matrix.png`, `ap_vs_iou.png`, `recall_by_distance.png` and `keypoint_errors.png`. `--limit 20` runs a quick check, and `--exclude list.txt` leaves out images the model was trained on. `python make_figures.py --dataset ...` rebuilds the figures in this README.
 
 ## Using your own model
 
@@ -54,7 +62,7 @@ Edit `config.yaml`: which model class is which FSOCO class, each cone's height, 
 
 ## Limits
 
-- FSOCO has no camera intrinsics, so the range gate assumes one camera (80 degree vertical field of view) for every image. Distances are approximate.
+- FSOCO has no camera intrinsics, so the range gate assumes one camera (80 degree vertical field of view) for every image. For teams with a narrower lens or cropped frames the estimate can be off several times, so treat the gate as a coarse near/far split, and set `vertical_fov_deg` for your own camera.
 - Outline distance cannot see a keypoint that slides along the outline to the wrong place. The layout check (left of right, each side ordered bottom to top) catches swaps and mirrored keypoints, not small slides.
 - FSOCO masks include the cone's base plate. A keypoint defined on the cone body above the plate shows that gap as error.
 

@@ -9,6 +9,7 @@ def focal_length_px(image_height, vertical_fov_deg):
 def estimate_distance(box_height_px, cone_height_m, image_height, vertical_fov_deg):
     """Pinhole estimate: distance = real height * focal length / height in pixels."""
     box_height_px = np.asarray(box_height_px, float)
+    cone_height_m = np.asarray(cone_height_m, float)
     with np.errstate(divide="ignore"):
         return np.where(box_height_px > 0,
                         cone_height_m * focal_length_px(image_height, vertical_fov_deg) / box_height_px, np.inf)
