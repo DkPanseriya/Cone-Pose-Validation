@@ -119,6 +119,105 @@ def layout_figure(cfg):
     plt.close(fig)
 
 
+def hard_cases_figure(dataset, cfg, per_case=3, seed=0):
+    """Cones that make FSOCO hard, and whether the validation scores them."""
+    from cone_validation.metrics import box_iou
+
+    # Picked by eye: geometry cannot tell lens distortion or an untagged fallen cone apart from others.
+    picked = {
+        "wide-angle lens": [("ff", "ff_00075.png", (1701, 1000, 1960, 1218)),
+                            ("ff", "ff_00559.png", (1773, 846, 1887, 944)),
+                            ("eufs", "eufs_00002.png", (195, 551, 273, 619))],
+        "lying, not tagged": [("amz", "amz_00453.jpg", (1105, 1308, 1234, 1396)),
+                              ("tuwr", "tuwr_00292.jpg", (5424, 2266, 6068, 2735)),
+                              ("fsbizkaia", "fsbizkaia_00553.jpg", (2159, 1199, 2245, 1263))],
+    }
+    rng = np.random.default_rng(seed)
+    pairs = list(samples(dataset))
+    found = {k: [] for k in ["occluded", "dark", "far away", "truncated", "knocked over"]}
+    used = set()
+    for image, annotation in [pairs[i] for i in rng.permutation(len(pairs))]:
+        if all(len(v) >= 40 for v in found.values()):
+            break
+        height, cones = load_cones(annotation, cfg)
+        team = image.parent.parent.name
+        boxes = np.array([c.box for c in cones]).reshape(-1, 4)
+        ious = box_iou(boxes, boxes) if len(boxes) else np.zeros((0, 0))
+        np.fill_diagonal(ious, 0)
+        for k, c in enumerate(cones):
+            h = c.box[3] - c.box[1]
+            if c.cls < 0:
+                continue
+            if "truncated" in c.tags and h > 40:
+                key = "truncated"
+            elif "knocked_over" in c.tags and h > 25:
+                key = "knocked over"
+            elif not c.tags and h > 30 and ious[k].max() > 0.2:
+                key = "occluded"
+            elif not c.tags and h < 12:
+                key = "far away"
+            elif not c.tags and h > 40:
+                key = "dark"
+            else:
+                continue
+            if len(found[key]) < 40:
+                found[key].append((image, c.box, team))
+
+    def crop(image, box, size=150):
+        img = cv2.cvtColor(cv2.imread(str(image)), cv2.COLOR_BGR2RGB)
+        x1, y1, x2, y2 = box
+        s = max(x2 - x1, y2 - y1) * 1.8 + 16
+        cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+        a, b = int(max(cx - s / 2, 0)), int(max(cy - s / 2, 0))
+        c, d = int(min(cx + s / 2, img.shape[1])), int(min(cy + s / 2, img.shape[0]))
+        tile = img[b:d, a:c].copy()
+        cv2.rectangle(tile, (int(x1 - a), int(y1 - b)), (int(x2 - a), int(y2 - b)), (255, 255, 255), 1)
+        return cv2.resize(tile, (size, size), interpolation=cv2.INTER_AREA)
+
+    def brightness(cand):
+        img = cv2.imread(str(cand[0]), cv2.IMREAD_GRAYSCALE)
+        x1, y1, x2, y2 = (int(v) for v in cand[1])
+        return img[y1:y2, x1:x2].mean()
+
+    def pick(cands):
+        chosen, teams = [], set()
+        for cand in cands:
+            if cand[2] not in teams and cand[0] not in used:
+                chosen.append(cand)
+                teams.add(cand[2])
+                used.add(cand[0])
+            if len(chosen) == per_case:
+                break
+        return chosen
+
+    found["dark"] = sorted(found["dark"], key=brightness)
+    columns = {
+        "occluded": (pick(found["occluded"]), "scored"),
+        "wide-angle lens": ([(dataset / t / "img" / n, b, t) for t, n, b in picked["wide-angle lens"]], "scored"),
+        "dark": (pick(found["dark"]), "scored"),
+        "lying, not tagged": ([(dataset / t / "img" / n, b, t) for t, n, b in picked["lying, not tagged"]],
+                              "scored: no tag"),
+        "far away": (pick(found["far away"]), "ignored: range gate"),
+        "tagged truncated": (pick(found["truncated"]), "ignored: tag"),
+        "tagged knocked over": (pick(found["knocked over"]), "ignored: tag"),
+    }
+    fig, axes = plt.subplots(per_case, len(columns), figsize=(13, 6.4))
+    for j, (name, (chosen, verdict)) in enumerate(columns.items()):
+        for i in range(per_case):
+            ax = axes[i, j]
+            ax.axis("off")
+            if i < len(chosen):
+                ax.imshow(crop(chosen[i][0], chosen[i][1]))
+                ax.text(3, 145, chosen[i][2], fontsize=7, color="white",
+                        bbox={"facecolor": "black", "alpha": 0.5, "pad": 1, "edgecolor": "none"})
+        colour = "#2b8a3e" if verdict.startswith("scored") else "#868e96"
+        axes[0, j].set_title(f"{name}\n{verdict}", fontsize=9.5, color=colour)
+    fig.suptitle("What makes FSOCO hard, and what the validation scores", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(OUT / "hard_cases.jpg", dpi=120, pil_kwargs={"quality": 88})
+    plt.close(fig)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dataset", required=True, type=Path, help="FSOCO bounding-box root")
@@ -129,6 +228,7 @@ def main():
     variety_figure(args.dataset)
     gate_figure(args.dataset, cfg)
     layout_figure(cfg)
+    hard_cases_figure(args.dataset, cfg)
     print(f"-> {OUT}")
 
 

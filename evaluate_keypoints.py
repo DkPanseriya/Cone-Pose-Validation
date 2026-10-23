@@ -28,13 +28,14 @@ def main():
     p.add_argument("--conf", type=float, default=0.25, help="score threshold for predictions matched to masks")
     p.add_argument("--exclude", type=Path, help="image names to leave out, one per line")
     p.add_argument("--limit", type=int, help="evaluate only the first N images, for a quick check")
+    p.add_argument("--every", type=int, default=1, help="use every N-th image: a sample spread over all teams")
     p.add_argument("--out", type=Path, default=Path("results/keypoints"))
     args = p.parse_args()
 
     cfg = Config.load(args.config)
     model = YOLO(args.model)
     exclude = args.exclude.read_text().split() if args.exclude else ()
-    pairs = list(samples(args.dataset, exclude))[: args.limit]
+    pairs = list(samples(args.dataset, exclude))[:: args.every][: args.limit]
     if not pairs:
         raise SystemExit(f"no images with annotations under {args.dataset}")
     check_model(model, cfg, need_keypoints=True)
@@ -42,6 +43,7 @@ def main():
     px = {n: [] for n in cfg.keypoints}
     rel = {n: [] for n in cfg.keypoints}
     masks = matched = layout_ok = 0
+    by_size = []                                # (cone height px, median error as share of height)
 
     for image, annotation in tqdm(pairs, desc="images"):
         height, cones = load_cones(annotation, cfg)
@@ -61,6 +63,7 @@ def main():
                 rel[name].append(float(b))
             matched += 1
             layout_ok += order_ok(kpts)
+            by_size.append((float(keep[c_idx].box[3] - keep[c_idx].box[1]), float(np.median(err_rel))))
 
     if not matched:
         raise SystemExit("no prediction matched a mask; check the model, the config and the dataset path")
@@ -69,6 +72,7 @@ def main():
     report = {
         "model": str(args.model),
         "images": len(pairs),
+        "sample": f"every {args.every}th image" if args.every > 1 else "all images",
         "masks_evaluated": masks,
         "masks_matched": matched,
         "plausible_layout": layout_ok / matched,
@@ -79,6 +83,7 @@ def main():
     }
     (args.out / "keypoints.json").write_text(json.dumps(report, indent=2))
     plots.keypoint_errors(rel, cfg.keypoints, args.out / "keypoint_errors.png")
+    plots.error_by_size(np.array(by_size), args.out / "keypoint_error_by_size.png")
     print(f"{matched}/{masks} masks matched, layout plausible for {report['plausible_layout']:.1%}  ->  {args.out}")
 
 

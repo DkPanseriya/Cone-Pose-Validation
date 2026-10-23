@@ -30,6 +30,7 @@ def main():
     p.add_argument("--conf", type=float, default=0.25, help="score threshold for the confusion matrix and recall")
     p.add_argument("--exclude", type=Path, help="image names to leave out, one per line (e.g. your training images)")
     p.add_argument("--limit", type=int, help="evaluate only the first N images, for a quick check")
+    p.add_argument("--every", type=int, default=1, help="use every N-th image: a sample spread over all teams")
     p.add_argument("--out", type=Path, default=Path("results/detection"))
     args = p.parse_args()
 
@@ -37,7 +38,7 @@ def main():
     model = YOLO(args.model)
     C = len(cfg.names)
     exclude = args.exclude.read_text().split() if args.exclude else ()
-    pairs = list(samples(args.dataset, exclude))[: args.limit]
+    pairs = list(samples(args.dataset, exclude))[:: args.every][: args.limit]
     if not pairs:
         raise SystemExit(f"no images with annotations under {args.dataset}")
     check_model(model, cfg)
@@ -93,6 +94,7 @@ def main():
     report = {
         "model": str(args.model),
         "images": len(pairs),
+        "sample": f"every {args.every}th image" if args.every > 1 else "all images",
         "imgsz": args.imgsz,
         "range_gate_m": [cfg.gate_min_m, cfg.gate_max_m] if cfg.gate_enabled else None,
         "ground_truth_per_class": dict(zip(cfg.names, n_gt.tolist())),

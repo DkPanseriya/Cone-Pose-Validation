@@ -79,3 +79,29 @@ def keypoint_errors(errors, names, path):
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
+
+
+def error_by_size(rows, path, bins=(0, 20, 40, 80, 160, 10000)):
+    """Median keypoint error per cone against the cone's height in pixels."""
+    height, err = rows[:, 0], 100 * rows[:, 1]
+    labels, med, lo, hi, counts = [], [], [], [], []
+    for a, b in zip(bins[:-1], bins[1:]):
+        e = err[(height >= a) & (height < b)]
+        if len(e) < 5:
+            continue
+        labels.append(f"{a}-{b} px" if b < 10000 else f">{a} px")
+        med.append(np.median(e))
+        lo.append(np.percentile(e, 25))
+        hi.append(np.percentile(e, 75))
+        counts.append(len(e))
+    x = np.arange(len(labels))
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    ax.bar(x, med, color="#4c6ef5", width=0.6)
+    ax.errorbar(x, med, yerr=[np.subtract(med, lo), np.subtract(hi, med)], fmt="none", color="#333", capsize=4)
+    ax.set_xticks(x, [f"{label}\n({n} cones)" for label, n in zip(labels, counts)])
+    ax.set_xlabel("cone height in the image")
+    ax.set_ylabel("keypoint error, % of cone height")
+    ax.set_title("Keypoint error against cone size (median, middle 50%)")
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)

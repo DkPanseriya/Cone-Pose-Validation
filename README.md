@@ -6,16 +6,24 @@ Validate a cone detector with keypoints (YOLOv8-pose) on the public [FSOCO datas
 
 ## Why
 
-A Formula Student driverless car reads the track from coloured cones, and with a single camera it estimates where each cone stands from keypoints on the cone's outline. A model trained on one team's car has to work on any camera, mounting angle and light. FSOCO pools images from more than 40 teams, so it is a hard test of robustness and generalisation.
+A Formula Student driverless car reads the track from coloured cones, and with a single camera it estimates where each cone stands from keypoints on the cone's outline. Validating such a model normally means hand-labelling keypoints on a validation set.
+
+This workflow skips that. FSOCO, the community cone dataset, has no keypoint labels, but it has pixel masks, and a mask's outline is exactly where the keypoints should sit. Reusing it saves the manual labelling. And because FSOCO pools images from more than 40 teams, cars and cameras, the same run also shows how the detector holds up across camera setups, image quality and mounting positions.
 
 ![One image from each of eight FSOCO teams](docs/figures/fsoco_variety.png)
 
-FSOCO has cone boxes and pixel masks, but no keypoints. This workflow uses both:
+The workflow uses both FSOCO sets:
 
 | Part | FSOCO data | Measures |
 |---|---|---|
 | Detection | 11,572 images with boxes | AP per class over IoU 0.50 to 0.95, confusion matrix with a background class, recall by distance |
 | Keypoints | 1,517 images with masks | distance of every predicted keypoint to the cone outline traced from the mask, and a check that the keypoints keep their layout |
+
+## What is in the data
+
+![Hard cases in FSOCO and whether they are scored](docs/figures/hard_cases.jpg)
+
+Occluded, dark and lens-distorted cones are scored: they are the realistic hard cases. Cones beyond the range gate, and cones FSOCO tags as truncated or knocked over, are ignored, because their box height says nothing reliable about distance. FSOCO does not tag every fallen cone, so a few lying cones stay in the scored set.
 
 ## How it works
 
@@ -40,6 +48,28 @@ flowchart LR
 
 ![Swapped keypoints pass the outline test but fail the layout check](docs/figures/layout_check.png)
 
+## Example results
+
+What the scripts produce, run on a sample spread over every team: every 25th image of the box set (457 images, 5,479 cones inside the gate) and every 4th of the mask set (371 images, 4,228 cones), with the model's own fine-tuning images left out. The model is the team's YOLOv8s-pose cone detector.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/figures/example_recall_by_distance.png" alt="Recall by distance"></td>
+    <td width="50%"><img src="docs/figures/example_confusion_matrix.png" alt="Confusion matrix"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/figures/example_keypoint_errors.png" alt="Keypoint error per keypoint"></td>
+    <td><img src="docs/figures/example_keypoint_error_by_size.png" alt="Keypoint error against cone size"></td>
+  </tr>
+</table>
+
+What they show for this model:
+
+- **Misses, not mix-ups.** Of 4,522 cones found, 29 got the wrong colour; the errors are cones not found at all.
+- **Range is the main limit.** Recall is 99% below 5 m, 90% at 5 to 10 m and 54% at 10 to 15 m.
+- **Boxes are good, not tight.** mAP@50 is 0.88 but mAP@50-95 is 0.60: AP falls steeply above IoU 0.8, where a few pixels decide on a small cone (`ap_vs_iou.png`).
+- **Keypoints sit within 2 to 3% of cone height** (median), about 1 px. Error grows from 1% on large cones to 5% on cones under 20 px, and the two bottom keypoints carry the base-plate offset of the masks.
+
 ## Quick start
 
 ```bash
@@ -54,7 +84,7 @@ python evaluate_keypoints.py --model your_cone_model.pt --dataset data/fsoco_seg
 python visualize.py --model your_cone_model.pt --image data/fsoco_segmentation_train/<team>/img/<image>
 ```
 
-Results go to `results/`: a JSON summary plus `confusion_matrix.png`, `ap_vs_iou.png`, `recall_by_distance.png` and `keypoint_errors.png`. `--limit 20` runs a quick check, and `--exclude list.txt` leaves out images the model was trained on. `python make_figures.py --dataset ...` rebuilds the figures in this README.
+Results go to `results/`: a JSON summary plus `confusion_matrix.png`, `ap_vs_iou.png`, `recall_by_distance.png`, `keypoint_errors.png` and `keypoint_error_by_size.png`. `--limit 20` runs a quick check, and `--exclude list.txt` leaves out images the model was trained on. `python make_figures.py --dataset ...` rebuilds the figures in this README.
 
 ## Using your own model
 
@@ -72,6 +102,6 @@ I built this as Perception System Engineer at Schanzer Racing Electric, the Form
 
 ## Credits
 
-- [FSOCO](https://fsoco.github.io/fsoco-dataset/), the Formula Student Objects in Context dataset: M. Vödisch et al., "FSOCO: The Formula Student Objects in Context Dataset", SAE International Journal of Connected and Automated Vehicles, 2022. Not redistributed here; the figure above shows one FSOCO image.
+- [FSOCO](https://fsoco.github.io/fsoco-dataset/), the Formula Student Objects in Context dataset: M. Vödisch et al., "FSOCO: The Formula Student Objects in Context Dataset", SAE International Journal of Connected and Automated Vehicles, 2022. Not redistributed here; the figures show FSOCO images.
 - [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics).
 - Code: MIT.
